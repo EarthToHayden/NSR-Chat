@@ -1,0 +1,10 @@
+{
+    "name": "@nsr/retrieval",
+    "private": true,
+    "version": "0.0.0",
+    "type": "module",
+    "scripts": {
+        "dev": "node --watch src/index.mjs",
+        "build": "node -e \"console.log('retrieval build placeholder')\""
+    }
+}

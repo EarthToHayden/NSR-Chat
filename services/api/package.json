@@ -1,0 +1,12 @@
+{
+    "name": "@nsr/api",
+    "private": true,
+    "version": "0.0.0",
+    "type": "module",
+    "scripts": {
+        "dev": "node --watch --env-file-if-exists=.env src/index.mjs",
+        "start": "node src/index.mjs",
+        "test": "node --test \"tests/**/*.spec.mjs\"",
+        "build": "node -e \"console.log('api build placeholder')\""
+    }
+}
