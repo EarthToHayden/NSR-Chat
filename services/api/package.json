@@ -8,5 +8,8 @@
         "start": "node src/index.mjs",
         "test": "node --test \"tests/**/*.spec.mjs\"",
         "build": "node -e \"console.log('api build placeholder')\""
+    },
+    "dependencies": {
+        "@anthropic-ai/sdk": "^0.105.0"
     }
 }
