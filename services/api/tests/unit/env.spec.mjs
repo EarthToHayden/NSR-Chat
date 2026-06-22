@@ -40,7 +40,7 @@ test('loadEnv: Claude config defaults when env is unset', () => {
 
     assert.equal(env.anthropicApiKey, undefined) // no secret default
     assert.equal(env.claudeModel, 'claude-opus-4-8')
-    assert.equal(env.claudeMaxTokens, 8192)
+    assert.equal(env.claudeMaxTokens, 16000)
     assert.equal(env.claudeThinking, 'off')
     assert.equal(env.claudeMaxConcurrentPerUser, 3)
     assert.equal(env.claudeRateLimitMax, 20)
@@ -85,6 +85,6 @@ test('loadEnv: invalid integers fall back to defaults', () => {
         { CLAUDE_MAX_TOKENS: 'not-a-number', CLAUDE_RETRY_BASE_MS: '-5' },
         loadEnv
     )
-    assert.equal(env.claudeMaxTokens, 8192)
+    assert.equal(env.claudeMaxTokens, 16000) // default
     assert.equal(env.claudeRetryBaseMs, 500)
 })
