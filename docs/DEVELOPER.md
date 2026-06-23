@@ -14,8 +14,8 @@ Future feature work should follow the same pattern:
 ## Development Environment
 
 ### Prerequisites
-- Node.js 18+
-- npm or yarn
+- Node.js 20.12+ (the API dev script uses `--env-file-if-exists`)
+- npm
 
 ### Setup
 
@@ -29,6 +29,31 @@ npm --prefix services/api install
 # Install shared contract dependencies
 npm --prefix shared/contracts install
 ```
+
+### Claude API configuration
+
+The chat endpoint calls the real Claude API when a key is present, and uses a
+built-in stub otherwise (keeps tests and key-less dev working).
+
+```bash
+cp services/api/.env.example services/api/.env
+# set ANTHROPIC_API_KEY=sk-ant-... in services/api/.env
+```
+
+`services/api/.env` is git-ignored; `npm run dev:api` auto-loads it. All vars
+have safe defaults (documented in `.env.example`):
+
+| Var | Default | Purpose |
+|-----|---------|---------|
+| `ANTHROPIC_API_KEY` | (unset → stub) | Enables live Claude |
+| `CLAUDE_MODEL` | `claude-opus-4-8` | Model id |
+| `CLAUDE_MAX_TOKENS` | `16000` | Max output tokens |
+| `CLAUDE_SYSTEM_PROMPT` | (built-in) | System prompt |
+| `CLAUDE_THINKING` | `off` | `off` or `adaptive` |
+| `CLAUDE_MAX_CONCURRENT_PER_USER` | `3` | Concurrent streams per user |
+| `CLAUDE_RATE_LIMIT_MAX` / `_WINDOW_MS` | `20` / `60000` | Requests per window |
+| `CLAUDE_RETRY_MAX_ATTEMPTS` / `_BASE_MS` | `3` / `500` | Upstream retry/backoff |
+| `TRUST_PROXY_HEADER` | `false` | Trust X-Forwarded-For / X-User-Id for identity |
 
 ### Local Development
 
@@ -103,8 +128,10 @@ Then manually verify in browser (`npm run dev:web`):
 
 ### Future Hardening
 Before EC2 deployment, add:
-- Real authentication (email magic-link or OAuth).
-- Rate limiting and DDoS protection.
+- Real authentication (email magic-link or OAuth) — then per-user limits key on
+  user id instead of IP (swap `resolveUserKey`).
+- Shared limiter store (e.g. Redis) so rate/concurrency limits are global across
+  instances (current limiters are in-memory / per process).
 - Database migration path (SQLite → PostgreSQL).
 - Document ingestion and vector search.
 - Audit logging and monitoring.

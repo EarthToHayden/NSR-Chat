@@ -156,7 +156,7 @@
 - [ ] Human review of limiter design and in-memory/per-instance caveat (Redis later).
 
 ## Phase 8: Verification and Docs
-- [ ] Task 17: Integration tests, docs, and verification matrix
+- [x] Task 17: Integration tests, docs, and verification matrix
   - Acceptance: every Phase-2 acceptance criterion mapped to test/manual check;
     README/docs cover `.env` + SDK install + limiter env; matrix updated.
   - Verify: `npm test`, `npm run lint`, `npm run build` pass; docs review.

@@ -14,6 +14,23 @@ npm run dev:web
 npm run dev:api
 ```
 
+## Connecting Claude
+
+The API calls the **real Claude API** when a key is configured, and falls back to
+a built-in **stub** (a canned response) when it isn't — so tests and key-less
+local dev always work.
+
+```bash
+cp services/api/.env.example services/api/.env
+# then set ANTHROPIC_API_KEY=sk-ant-... in services/api/.env
+npm run dev:api   # auto-loads services/api/.env
+```
+
+Without `ANTHROPIC_API_KEY`, chat still works but returns the stub response.
+`.env` is git-ignored — never commit your key. Optional tuning vars (model, max
+tokens, system prompt, per-user rate limit + concurrency cap, retry backoff) are
+documented in `services/api/.env.example` and `docs/DEVELOPER.md`.
+
 ## Verification
 
 Before committing any work, run:
@@ -49,14 +66,18 @@ Developer workflow and setup: [docs/DEVELOPER.md](docs/DEVELOPER.md)
 | `npm run lint` | Lint code |
 | `npm run preview` | Preview built frontend |
 
-## Foundation Status
+## Status
 
-Tasks 1–10 complete. Foundation is verified and ready for the next phase.
+**Phase 1 (foundation)** and **Phase 2 (live Claude integration)** complete:
+- Real Claude API streaming behind a provider abstraction, with stub fallback.
+- Full conversation history sent for context; user + assistant messages persisted.
+- Per-user rate limiting and concurrency caps, bounded retry/backoff, and
+  abort-on-disconnect.
 
 **Next phase work (not yet implemented):**
-- Email magic-link authentication
+- Email magic-link authentication (then per-user limits key on user id, not IP)
 - Document ingestion and vector search
-- EC2 deployment and multi-user hardening
+- EC2 deployment with a shared limiter store (Redis) for multi-instance
 
 See [SPEC.md](SPEC.md) for full requirements.
 
