@@ -15,6 +15,12 @@ const server = createServer({
         retryMaxAttempts: env.claudeRetryMaxAttempts,
         retryBaseMs: env.claudeRetryBaseMs,
     },
+    limits: {
+        maxConcurrentPerUser: env.claudeMaxConcurrentPerUser,
+        rateLimitMax: env.claudeRateLimitMax,
+        rateLimitWindowMs: env.claudeRateLimitWindowMs,
+    },
+    trustProxyHeader: env.trustProxyHeader,
 })
 
 server.listen(env.port, () => {

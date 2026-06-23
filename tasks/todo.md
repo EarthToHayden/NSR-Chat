@@ -144,7 +144,7 @@
   - Verify: unit tests for all three; `npm test` passes.
   - Files: services/api/src/lib/resolve-user-key.mjs, services/api/src/lib/rate-limiter.mjs, services/api/src/lib/concurrency-limiter.mjs, services/api/tests/unit/
 
-- [ ] Task 16: Enforce limits in the chat route + rate-limit middleware
+- [x] Task 16: Enforce limits in the chat route (limits enforced inline; no separate middleware)
   - Acceptance: over-cap -> 429 (no upstream call); over-rate -> 429 +
     `Retry-After`; slot released in `finally`; limits key on resolved identity.
   - Verify: integration tests for both 429 cases; manual rapid-request check;

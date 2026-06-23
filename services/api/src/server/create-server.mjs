@@ -11,8 +11,10 @@ import { runMigrations } from '../persistence/migrations.mjs'
 import { createConversationRepository } from '../persistence/conversation-repository.mjs'
 import { createChatProvider } from '../modules/providers/create-chat-provider.mjs'
 import { createAnthropicClient } from '../modules/providers/anthropic-client.mjs'
+import { createRateLimiter } from '../lib/rate-limiter.mjs'
+import { createConcurrencyLimiter } from '../lib/concurrency-limiter.mjs'
 
-export function createServer({ startedAt, dbPath, claude = {} } = {}) {
+export function createServer({ startedAt, dbPath, claude = {}, limits = {}, trustProxyHeader = false } = {}) {
     const db = createSqliteClient(dbPath)
     runMigrations(db)
 
@@ -34,12 +36,28 @@ export function createServer({ startedAt, dbPath, claude = {} } = {}) {
         },
     })
 
+    // Per-user safety limits. In-memory / per instance - a multi-instance
+    // deployment would back these with a shared store (see SPEC extension point)
+    const rateLimiter = createRateLimiter({
+        max: limits.rateLimitMax ?? 20,
+        windowMs: limits.rateLimitWindowMs ?? 60_000,
+    })
+    const concurrencyLimiter = createConcurrencyLimiter({
+        max: limits.maxConcurrentPerUser ?? 3,
+    })
+
     const routeDefs = [
         ...createHealthRoutes(startedAt),
         ...createAuthRoutes(),
         ...createLibraryRoutes(),
         ...createConversationRoutes({ conversationRepo }),
-        ...createChatRoutes({ conversationRepo, provider: chatProvider }),
+        ...createChatRoutes({
+            conversationRepo,
+            provider: chatProvider,
+            rateLimiter,
+            concurrencyLimiter,
+            trustProxyHeader,
+        }),
     ]
 
     const safeRoutes = routeDefs.map((route) => ({
