@@ -89,7 +89,7 @@
 - [ ] AI edits/adds no implementation files — only planning/spec docs.
 
 ## Phase 5: Configuration and Secrets
-- [ ] Task 11: Add Claude + limiter configuration and secret handling
+- [x] Task 11: Add Claude + limiter configuration and secret handling
   - Acceptance: env exposes all Claude/limiter/retry/identity settings (default
     model `claude-opus-4-8`, thinking off, no secret defaults); `.env.example`
     documents them; `.env` git-ignored.
@@ -101,13 +101,13 @@
 - [ ] Key-absent confirmed as a safe default, not an error.
 
 ## Phase 6: Real Claude Streaming
-- [ ] Task 12: Add SDK dependency, extract stub client, add provider selector
+- [x] Task 12: Add SDK dependency, extract stub client, add provider selector
   - Acceptance: `@anthropic-ai/sdk` installed; stub extracted to its own module;
     selector returns stub when no key, real provider when key present.
   - Verify: unit test for selector; `npm test` passes.
   - Files: services/api/package.json, services/api/src/modules/providers/stub-claude-client.mjs, services/api/src/modules/providers/create-chat-provider.mjs, services/api/tests/unit/
 
-- [ ] Task 13a: Anthropic client core — mapping, streaming, event translation
+- [x] Task 13a: Anthropic client core — mapping, streaming, event translation
   - Acceptance: maps messages + system prompt (`system`, not a message); text
     deltas -> `content_delta`; non-text (thinking) not surfaced;
     refusal/non-retryable -> throw; SDK `maxRetries: 0`. No retry logic yet.
