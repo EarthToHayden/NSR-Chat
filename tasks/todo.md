@@ -137,7 +137,7 @@
 - [ ] Human review before limiter enforcement.
 
 ## Phase 7: Multi-User Safety
-- [ ] Task 15: Identity resolution, rate limiter, concurrency limiter
+- [x] Task 15: Identity resolution, rate limiter, concurrency limiter
   - Acceptance: identity resolves auth/header/IP (proxy headers only with trust
     flag); rate limiter allows/blocks/resets; concurrency limiter
     acquires/releases/rejects over cap; swappable store interface.
