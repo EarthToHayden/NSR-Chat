@@ -104,3 +104,176 @@ test('anthropic client: upstream errors propagate (not swallowed)', async () => 
         for await (const _event of client.streamMessage({ messages: [] })) { /* drain */ }
     }, /boom from SDK/)
 })
+
+test('anthropic client: retries a retryable error before the first token, then succeeds', async () => {
+    const sleeps = []
+    let calls = 0
+    const anthropic = {
+        messages: {
+            stream() {
+                calls += 1
+                if (calls === 1) {
+                    return (async function* () {
+                        const err = new Error('overloaded')
+                        err.status = 529
+                        throw err
+                    })()
+                }
+                return (async function* () {
+                    yield { type: 'message_start' }
+                    yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'ok' } }
+                    yield { type: 'message_stop' }
+                })()
+            },
+        },
+    }
+    const client = createAnthropicClient({
+        apiKey: 'k', model: 'm', maxTokens: 1, systemPrompt: 's', anthropic,
+        retryMaxAttempts: 3, retryBaseMs: 10,
+        sleep: async (ms) => { sleeps.push(ms) },
+    })
+
+    const events = []
+    for await (const e of client.streamMessage({ messages: [] })) events.push(e)
+
+    assert.equal(calls, 2)                  // failed once, retried, succeeded
+    assert.deepEqual(sleeps, [10])          // one backoff of baseMs
+    const text = events.filter((e) => e.type === 'content_delta').map((e) => e.text).join('')
+    assert.equal(text, 'ok')
+})
+
+test('anthropic client: honors Retry-After header for the backoff delay', async () => {
+    const sleeps = []
+    let calls = 0
+    const anthropic = {
+        messages: {
+            stream() {
+                calls += 1
+                if (calls === 1) {
+                    return (async function* () {
+                        const err = new Error('rate limited')
+                        err.status = 429
+                        err.headers = { 'retry-after': '2' }
+                        throw err
+                    })()
+                }
+                return (async function* () {
+                    yield { type: 'message_start' }
+                    yield { type: 'message_stop' }
+                })()
+            },
+        },
+    }
+    const client = createAnthropicClient({
+        apiKey: 'k', model: 'm', maxTokens: 1, systemPrompt: 's', anthropic,
+        retryMaxAttempts: 3, retryBaseMs: 10,
+        sleep: async (ms) => { sleeps.push(ms) },
+    })
+    for await (const _e of client.streamMessage({ messages: [] })) { /* drain */ }
+    assert.deepEqual(sleeps, [2000])        // 2s from Retry-After, not baseMs
+})
+
+test('anthropic client: gives up after retryMaxAttempts retryable failures', async () => {
+    let calls = 0
+    const anthropic = {
+        messages: {
+            stream() {
+                calls += 1
+                return (async function* () {
+                    const err = new Error('still rate limited')
+                    err.status = 429
+                    throw err
+                })()
+            },
+        },
+    }
+    const client = createAnthropicClient({
+        apiKey: 'k', model: 'm', maxTokens: 1, systemPrompt: 's', anthropic,
+        retryMaxAttempts: 3, retryBaseMs: 1, sleep: async () => {},
+    })
+    await assert.rejects(async () => {
+        for await (const _e of client.streamMessage({ messages: [] })) { /* drain */ }
+    }, /still rate limited/)
+    assert.equal(calls, 3)                  // 3 total attempts, then give up
+})
+
+test('anthropic client: does not retry a non-retryable (4xx) error', async () => {
+    let calls = 0
+    const anthropic = {
+        messages: {
+            stream() {
+                calls += 1
+                return (async function* () {
+                    const err = new Error('bad request')
+                    err.status = 400
+                    throw err
+                })()
+            },
+        },
+    }
+    const client = createAnthropicClient({
+        apiKey: 'k', model: 'm', maxTokens: 1, systemPrompt: 's', anthropic,
+        retryMaxAttempts: 3, retryBaseMs: 1, sleep: async () => {},
+    })
+    await assert.rejects(async () => {
+        for await (const _e of client.streamMessage({ messages: [] })) { /* drain */ }
+    }, /bad request/)
+    assert.equal(calls, 1)                  // no retry on 4xx
+})
+
+test('anthropic client: does not retry once streaming has started', async () => {
+    let calls = 0
+    const anthropic = {
+        messages: {
+            stream() {
+                calls += 1
+                return (async function* () {
+                    yield { type: 'message_start' }
+                    yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'partial' } }
+                    const err = new Error('mid-stream blowup')
+                    err.status = 500            // retryable status, but too late
+                    throw err
+                })()
+            },
+        },
+    }
+    const client = createAnthropicClient({
+        apiKey: 'k', model: 'm', maxTokens: 1, systemPrompt: 's', anthropic,
+        retryMaxAttempts: 3, retryBaseMs: 1, sleep: async () => {},
+    })
+    const events = []
+    await assert.rejects(async () => {
+        for await (const e of client.streamMessage({ messages: [] })) events.push(e)
+    }, /mid-stream blowup/)
+    assert.equal(calls, 1)                  // no retry despite retryable status
+    assert.equal(events[0].type, 'message_start')
+})
+
+test('anthropic client: forwards the abort signal and does not retry on abort', async () => {
+    let calls = 0
+    let receivedSignal
+    const controller = new AbortController()
+    const anthropic = {
+        messages: {
+            stream(_params, options) {
+                calls += 1
+                receivedSignal = options?.signal
+                return (async function* () {
+                    controller.abort()
+                    const err = new Error('aborted mid-stream')
+                    err.status = 500            // looks retryable, but abort wins
+                    throw err
+                })()
+            },
+        },
+    }
+    const client = createAnthropicClient({
+        apiKey: 'k', model: 'm', maxTokens: 1, systemPrompt: 's', anthropic,
+        retryMaxAttempts: 3, retryBaseMs: 1, sleep: async () => {},
+    })
+    await assert.rejects(async () => {
+        for await (const _e of client.streamMessage({ messages: [], signal: controller.signal })) { /* drain */ }
+    })
+    assert.equal(receivedSignal, controller.signal)  // signal forwarded to SDK
+    assert.equal(calls, 1)                            // abort short-circuits retry
+})

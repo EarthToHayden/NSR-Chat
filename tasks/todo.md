@@ -115,7 +115,7 @@
     `npm test` passes.
   - Files: services/api/src/modules/providers/anthropic-client.mjs, services/api/tests/unit/
 
-- [ ] Task 13b: Anthropic client resilience — retry/backoff and abort
+- [x] Task 13b: Anthropic client resilience — retry/backoff and abort
   - Acceptance: bounded pre-stream exponential backoff on 429/5xx/overload up to
     `claudeRetryMaxAttempts` from `claudeRetryBaseMs` (honors `Retry-After`); no
     retry after first token; respects AbortSignal.
