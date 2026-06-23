@@ -123,7 +123,7 @@
     no-retry-after-token, abort); `npm test` passes.
   - Files: services/api/src/modules/providers/anthropic-client.mjs, services/api/tests/unit/
 
-- [ ] Task 14: Compose provider into server and upgrade the chat route
+- [x] Task 14: Compose provider into server and upgrade the chat route
   - Acceptance: real context-aware streamed response persists; full history sent;
     pre-stream error -> HTTP error, mid-stream -> `error` envelope; disconnect
     aborts upstream; stub path still works with no key.

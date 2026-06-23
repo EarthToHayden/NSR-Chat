@@ -3,7 +3,19 @@ import { createServer } from './server/create-server.mjs'
 
 const env = loadEnv()
 const startedAt = Date.now()
-const server = createServer({ startedAt, dbPath: env.dbPath })
+const server = createServer({
+    startedAt,
+    dbPath: env.dbPath,
+    claude: {
+        apiKey: env.anthropicApiKey,
+        model: env.claudeModel,
+        maxTokens: env.claudeMaxTokens,
+        systemPrompt: env.claudeSystemPrompt,
+        thinking: env.claudeThinking,
+        retryMaxAttempts: env.claudeRetryMaxAttempts,
+        retryBaseMs: env.claudeRetryBaseMs,
+    },
+})
 
 server.listen(env.port, () => {
     console.log(`[api] listening on http://localhost:${env.port}`)

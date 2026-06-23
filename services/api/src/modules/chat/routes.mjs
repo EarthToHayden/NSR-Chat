@@ -1,6 +1,6 @@
 import { readJsonBody } from '../../server/request-body.mjs'
 import { requireJsonContentType } from '../../middleware/require-json.mjs'
-import { createClaudeProvider } from '../providers/claude-provider.mjs'
+
 
 function writeNdjson(res, payload) {
     res.write(`${JSON.stringify(payload)}\n`)
@@ -20,29 +20,7 @@ function validateBody(body) {
     }
 }
 
-function createStubClaudeClient() {
-    return {
-        async *streamMessage() {
-            const timestamp = new Date().toISOString()
-            yield {
-                type: 'message_start',
-                timestamp,
-            }
-            yield {
-                type: 'content_delta',
-                text: 'Stub assistant response.',
-            }
-            yield {
-                type: 'message_done',
-                done: true,
-            }
-        }
-    }
-}
-
-export function createChatRoutes({ conversationRepo }) {
-    const provider = createClaudeProvider({ client: createStubClaudeClient() })
-
+export function createChatRoutes({ conversationRepo, provider }) {
     return [
         {
             method: 'POST',
@@ -60,38 +38,88 @@ export function createChatRoutes({ conversationRepo }) {
                 const body = await readJsonBody(req)
                 validateBody(body)
 
-                const userMessage = conversationRepo.appendMessage({
+                // Persist the user's message, then load the full thread so the model
+                // gets the whole conversation as context (not just this turn)
+                conversationRepo.appendMessage({
                     conversationId: params.conversationId,
                     role: 'user',
                     content: body.content.trim(),
                 })
 
+                const history = conversationRepo.listMessagesByConversationId(params.conversationId)
+
                 const assistantMessageId = `msg_assistant_${Date.now()}`
                 let assistantText = ''
 
-                res.writeHead(200, {
-                    'Content-Type': 'application/x-ndjson; charset=utf-8',
-                    'Cache-Control': 'no-cache',
-                    Connection: 'keep-alive',
-                })
+                // Abort the upstream call if the client disconnects, so an
+                // abandoned stream stops consuming tokens
+                const abortController = new AbortController()
+                res.on('close', () => abortController.abort())
 
-                for await (const event of provider.streamMessage({
-                    conversationId: params.conversationId,
-                    messageId: assistantMessageId,
-                    messages: [userMessage],
-                })) {
-                    if (event.type === 'delta') {
-                        assistantText += event.chunk ?? ''
-                    }
-                    writeNdjson(res, event)
+                // Write the 200 + NDJSON header lazily on the first event, so a
+                // failure BEFORE streaming begins can return a real HTTP status
+                // instead of a half-open stream
+                let headerWritten = false
+                const ensureStreamHeader = () => {
+                    if (headerWritten) return
+                    res.writeHead(200, {
+                        'Content-Type': 'application/x-ndjson; charset=utf-8',
+                        'Cache-Control': 'no-cache',
+                        Connection: 'keep-alive',
+                    })
+                    headerWritten = true
                 }
 
-                conversationRepo.appendMessage({
-                    conversationId: params.conversationId,
-                    role: 'assistant',
-                    content: assistantText || 'Stub assistant response.',
-                })
+                const persistAssistant = () => {
+                    if (!assistantText) return
+                    conversationRepo.appendMessage({
+                        conversationId: params.conversationId,
+                        role: 'assistant',
+                        content: assistantText,
+                    })
+                }
+                try {
+                        for await (const event of provider.streamMessage({
+                        conversationId: params.conversationId,
+                        messageId: assistantMessageId,
+                        messages: history,
+                        signal: abortController.signal,
+                    })) {
+                        ensureStreamHeader()
+                        if (event.type === 'delta') {
+                            assistantText += event.chunk ?? ''
+                        }
+                        writeNdjson(res, event)
+                    }
+                } catch (error) {
+                    // Client disconnected, persist whatever streamed; nothing to send
+                    if (abortController.signal.aborted) {
+                        persistAssistant()
+                        return
+                    }
 
+                    // Failed before any byte went out. Real HTTP error
+                    if (!headerWritten) {
+                        const statusCode = error.code === 'refusal' ? 422 : 502
+                        res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' })
+                        res.end(JSON.stringify({ error: { message: error.message } }))
+                        return
+                    }
+
+                    // Failed mid-stream, surface an error event in the open stream
+                    persistAssistant()
+                    writeNdjson(res, {
+                        type: 'error',
+                        conversationId: params.conversationId,
+                        messageId: assistantMessageId,
+                        error: error.message,
+                        timestamp: new Date().toISOString(),
+                    })
+                    res.end()
+                    return
+                }
+
+                persistAssistant()
                 res.end()
             },
         },
